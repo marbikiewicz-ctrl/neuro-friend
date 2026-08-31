@@ -932,7 +932,7 @@ with tab_trening:
             else:
                 st.markdown(msg["content"])
 
-    # 2. NASTĘPNIE POLE WPISYWANIA WIADOMOŚCI PONIŻEJ HISTORII
+    # 2. POLE WPISYWANIA WIADOMOŚCI (ZAWSZE NA SAMYM KOŃCU POD WIADOMOŚCIAMI)
     if prompt := st.chat_input("Wpisz swoją odpowiedź..."):
         aktualny_czas = datetime.datetime.now()
         
@@ -952,11 +952,17 @@ with tab_trening:
             "content": prompt,
             "timestamp": current_time_str
         })
+        # Natychmiastowe odświeżenie, aby użytkownik od razu zobaczył swoją wiadomość
+        st.rerun()
+
+    # 3. GENEROWANIE ODPOWIEDZI AI, JEŚLI OSTATNIA WIADOMOŚĆ JEST OD UŻYTKOWNIKA
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        last_user_msg = st.session_state.messages[-1]["content"]
 
         rag_info = "Brak dodatkowego kontekstu."
         if retriever:
             try:
-                search_query = f"Scenariusz: {wybrany_scenariusz['tytul']}. Wypowiedź: {prompt}"
+                search_query = f"Scenariusz: {wybrany_scenariusz['tytul']}. Wypowiedź: {last_user_msg}"
                 docs = retriever.invoke(search_query)
                 if docs:
                     rag_info = "\n\n---\n\n".join([f"Źródło:\n{d.page_content}" for d in docs])
