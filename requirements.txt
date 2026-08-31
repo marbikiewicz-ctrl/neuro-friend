@@ -1,0 +1,12 @@
+streamlit
+pandas
+openai
+langchain-chroma
+langchain-openai
+langchain-community
+langchain-text-splitters
+chromadb
+pypdf
+charset-normalizer
+requests
+pysqlite3-binary
