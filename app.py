@@ -446,31 +446,48 @@ def tekst_do_mowy(content):
 
 
 GLOSY_ROZMOWCY = {
-    "Żeński": "pl-PL-ZofiaNeural",
-    "Męski": "pl-PL-MarekNeural",
+    "Żeński": ["pl-PL-ZofiaNeural", "pl-PL-AgnieszkaNeural"],
+    "Męski": ["pl-PL-MarekNeural"],
 }
 
 
 def synteza_mowy(tekst, glos="Żeński"):
     """Synteza mowy po polsku z wybranym głosem (żeński / męski) przez edge-tts.
-    Jeśli usługa jest niedostępna, używany jest zapasowo gTTS (jeden standardowy głos)."""
+    Jeśli usługa jest niedostępna, używany jest zapasowo gTTS (jeden standardowy głos),
+    a powód zapisywany jest w st.session_state["tts_blad"] i pokazywany w trybie głosowym."""
+    st.session_state["tts_blad"] = ""
     try:
         import asyncio
         import edge_tts
-
-        async def _generuj():
+    except ImportError:
+        st.session_state["tts_blad"] = "brak biblioteki edge-tts (zainstaluj: pip install edge-tts)"
+    else:
+        async def _generuj(nazwa_glosu):
             dane = b""
-            komunikacja = edge_tts.Communicate(tekst, GLOSY_ROZMOWCY.get(glos, "pl-PL-ZofiaNeural"))
+            komunikacja = edge_tts.Communicate(tekst, nazwa_glosu)
             async for fragment in komunikacja.stream():
                 if fragment["type"] == "audio":
                     dane += fragment["data"]
             return dane
 
-        audio = asyncio.run(_generuj())
-        if audio:
-            return audio
-    except Exception:
-        pass
+        bledy = []
+        for nazwa_glosu in GLOSY_ROZMOWCY.get(glos, GLOSY_ROZMOWCY["Żeński"]):
+            try:
+                try:
+                    audio = asyncio.run(_generuj(nazwa_glosu))
+                except RuntimeError:
+                    # gdy w wątku działa już pętla zdarzeń - osobna pętla
+                    petla = asyncio.new_event_loop()
+                    try:
+                        audio = petla.run_until_complete(_generuj(nazwa_glosu))
+                    finally:
+                        petla.close()
+                if audio:
+                    return audio
+                bledy.append(f"{nazwa_glosu}: pusta odpowiedź")
+            except Exception as e:
+                bledy.append(f"{nazwa_glosu}: {type(e).__name__}: {e}")
+        st.session_state["tts_blad"] = "; ".join(bledy)[:300]
     bufor = io.BytesIO()
     gTTS(text=tekst, lang="pl").write_to_fp(bufor)
     return bufor.getvalue()
@@ -1602,6 +1619,7 @@ if not st.session_state.config_completed:
             st.session_state.custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file is not None else None
             st.session_state.custom_bg_mime = custom_bg_file.type if custom_bg_file is not None else None
             st.session_state.glos_rozmowcy = glos_rozmowcy
+            st.session_state.tts_cache = {}
             st.session_state.avatar_choice = avatar_choice
             st.session_state.custom_avatar_file = custom_avatar_file
             st.session_state.custom_avatar_bytes = custom_avatar_file.getvalue() if custom_avatar_file is not None else None
@@ -2003,15 +2021,18 @@ with tab_trening:
         # Mowa rozmówcy (gTTS) dla ostatniej wypowiedzi AI - odtwarzana w komponencie
         audio_b64 = ""
         if ostatni and ostatni["role"] == "assistant" and not ostatni["content"].startswith("⚠️"):
-            idx = len(st.session_state.messages) - 1
+            glos_sesji = st.session_state.get("glos_rozmowcy", "Żeński")
+            idx = (len(st.session_state.messages) - 1, glos_sesji, ostatni["content"])
             if idx not in st.session_state.tts_cache:
                 try:
                     st.session_state.tts_cache[idx] = base64.b64encode(
-                        synteza_mowy(tekst_do_mowy(ostatni["content"]),
-                                     st.session_state.get("glos_rozmowcy", "Żeński"))).decode()
+                        synteza_mowy(tekst_do_mowy(ostatni["content"]), glos_sesji)).decode()
                 except Exception:
                     st.session_state.tts_cache[idx] = ""
             audio_b64 = st.session_state.tts_cache[idx]
+
+        if st.session_state.get("tts_blad"):
+            st.caption(f"ℹ️ Używany jest głos zapasowy (gTTS), bo wybrany głos jest niedostępny: {st.session_state['tts_blad']}")
 
         wynik = voice_component(
             audio_b64=audio_b64,
