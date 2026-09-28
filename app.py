@@ -445,7 +445,32 @@ def tekst_do_mowy(content):
     return main.strip()
 
 
-def synteza_mowy(tekst):
+GLOSY_ROZMOWCY = {
+    "Żeński": "pl-PL-ZofiaNeural",
+    "Męski": "pl-PL-MarekNeural",
+}
+
+
+def synteza_mowy(tekst, glos="Żeński"):
+    """Synteza mowy po polsku z wybranym głosem (żeński / męski) przez edge-tts.
+    Jeśli usługa jest niedostępna, używany jest zapasowo gTTS (jeden standardowy głos)."""
+    try:
+        import asyncio
+        import edge_tts
+
+        async def _generuj():
+            dane = b""
+            komunikacja = edge_tts.Communicate(tekst, GLOSY_ROZMOWCY.get(glos, "pl-PL-ZofiaNeural"))
+            async for fragment in komunikacja.stream():
+                if fragment["type"] == "audio":
+                    dane += fragment["data"]
+            return dane
+
+        audio = asyncio.run(_generuj())
+        if audio:
+            return audio
+    except Exception:
+        pass
     bufor = io.BytesIO()
     gTTS(text=tekst, lang="pl").write_to_fp(bufor)
     return bufor.getvalue()
@@ -488,6 +513,111 @@ def feedback_regulowy(mysl):
     if any(w in lower_thought for w in ["emocj", "stres", "nerw", "lęk", "strach"]):
         return f'Opisujesz silne emocje ("{mysl}"). Każda emocja coś komunikuje: co próbowała Ci powiedzieć ta? Przed kolejną próbą możesz skorzystać ze strefy relaksu.'
     return f'Dziękuję za refleksję ("{mysl}"). Zastanów się, w którym dokładnie momencie rozmowy pojawiła się ta trudność i co mogło ją wywołać.'
+
+
+DNI_ICS = {"Poniedziałek": "MO", "Wtorek": "TU", "Środa": "WE", "Czwartek": "TH",
+           "Piątek": "FR", "Sobota": "SA", "Niedziela": "SU"}
+
+
+def zbuduj_ics(data_start, godzina, dni):
+    """Plik kalendarza (.ics) z cyklicznym treningiem i przypomnieniem.
+    Po dodaniu do kalendarza powiadomienia pojawiają się na wszystkich urządzeniach powiązanych z kontem
+    (telefon, komputer, zegarek)."""
+    import uuid
+    start = datetime.datetime.combine(data_start, godzina)
+    koniec = start + datetime.timedelta(minutes=15)
+    fmt = "%Y%m%dT%H%M%S"
+    linie = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//NEURO FRIEND//Trening rozmow//PL", "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH", "BEGIN:VEVENT",
+        f"UID:{uuid.uuid4()}@neuro-friend",
+        f"DTSTAMP:{datetime.datetime.utcnow().strftime(fmt)}Z",
+        f"DTSTART:{start.strftime(fmt)}",
+        f"DTEND:{koniec.strftime(fmt)}",
+        "SUMMARY:Trening rozmowy - NEURO FRIEND",
+        "DESCRIPTION:Czas na krótki trening rozmowy w aplikacji NEURO FRIEND: https://neuro-friend.streamlit.app/",
+        "URL:https://neuro-friend.streamlit.app/",
+    ]
+    if dni:
+        linie.append("RRULE:FREQ=WEEKLY;BYDAY=" + ",".join(DNI_ICS[d] for d in dni if d in DNI_ICS))
+    linie += ["BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Trening rozmowy - NEURO FRIEND",
+              "TRIGGER:-PT10M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"]
+    return ("\r\n".join(linie) + "\r\n").encode("utf-8")
+
+
+NAZWY_DNI = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+
+
+def terminy_treningow(data_start, dni, tygodnie=4):
+    """Lista najbliższych terminów treningów (dla wydruku)."""
+    if not dni:
+        return [data_start]
+    wynik = []
+    for i in range(tygodnie * 7):
+        d = data_start + datetime.timedelta(days=i)
+        if NAZWY_DNI[d.weekday()] in dni:
+            wynik.append(d)
+    return wynik
+
+
+def zbuduj_harmonogram_do_druku(data_start, godzina, dni, accent="#78716C"):
+    """Harmonogram treningów jako strona HTML gotowa do wydruku (lub zapisu jako PDF w przeglądarce)."""
+    terminy = terminy_treningow(data_start, dni)
+    wiersze = "".join(
+        f"<tr><td>{i}</td><td>{NAZWY_DNI[d.weekday()]}</td><td>{d.strftime('%d.%m.%Y')}</td>"
+        f"<td>{godzina.strftime('%H:%M')}</td><td class='box'>&#9744;</td><td></td></tr>"
+        for i, d in enumerate(terminy, start=1)
+    )
+    dni_tekst = ", ".join(dni) if dni else "jednorazowo"
+    return f"""<!DOCTYPE html>
+<html lang="pl"><head><meta charset="UTF-8"><title>Harmonogram treningów - NEURO FRIEND</title>
+<style>
+body{{font-family:"Segoe UI",Arial,sans-serif;color:#1C1917;margin:40px;}}
+h1{{color:{accent};margin-bottom:4px;}} .sub{{color:#57534E;margin-top:0;}}
+table{{width:100%;border-collapse:collapse;margin-top:20px;font-size:15px;}}
+th,td{{border:1px solid #BDB8B2;padding:10px;text-align:left;}} th{{background:#F3F1EC;}}
+td.box{{text-align:center;font-size:22px;}}
+.note{{margin-top:24px;padding:14px;border-left:4px solid {accent};background:#FAF8F5;}}
+.btn{{margin-top:20px;padding:10px 18px;background:{accent};color:#fff;border:none;border-radius:6px;font-size:15px;cursor:pointer;}}
+@media print{{.btn{{display:none;}} body{{margin:15mm;}}}}
+</style></head><body>
+<h1>NEURO FRIEND – mój plan treningów</h1>
+<p class="sub">Dni: {dni_tekst} &nbsp;|&nbsp; Godzina: {godzina.strftime('%H:%M')} &nbsp;|&nbsp; Od: {data_start.strftime('%d.%m.%Y')}</p>
+<table><tr><th>Nr</th><th>Dzień</th><th>Data</th><th>Godzina</th><th>Zrobione</th><th>Moje notatki (jak poszło?)</th></tr>
+{wiersze}</table>
+<div class="note">Po każdym treningu zaznacz kratkę. Każda mała próba to już Twój sukces.<br>
+Aplikacja: https://neuro-friend.streamlit.app/</div>
+<button class="btn" onclick="window.print()">🖨️ Drukuj / zapisz jako PDF</button>
+</body></html>""".encode("utf-8")
+
+
+def konfiguracja_smtp():
+    """Dane serwera poczty z Secrets: SMTP_USER i SMTP_PASSWORD (np. Gmail z hasłem aplikacji)."""
+    return {
+        "host": odczytaj_sekret("SMTP_HOST") or "smtp.gmail.com",
+        "port": int(odczytaj_sekret("SMTP_PORT") or 465),
+        "user": odczytaj_sekret("SMTP_USER"),
+        "password": odczytaj_sekret("SMTP_PASSWORD"),
+    }
+
+
+def wyslij_email(adresat, temat, tresc, zalacznik_ics=None):
+    import smtplib
+    from email.message import EmailMessage
+    cfg = konfiguracja_smtp()
+    if not cfg["user"] or not cfg["password"]:
+        raise RuntimeError("Wysyłka e-mail nie jest skonfigurowana (brak SMTP_USER / SMTP_PASSWORD w Secrets).")
+    wiadomosc = EmailMessage()
+    wiadomosc["Subject"] = temat
+    wiadomosc["From"] = f"NEURO FRIEND <{cfg['user']}>"
+    wiadomosc["To"] = adresat
+    wiadomosc.set_content(tresc)
+    if zalacznik_ics:
+        wiadomosc.add_attachment(zalacznik_ics, maintype="text", subtype="calendar",
+                                 filename="trening_neuro_friend.ics")
+    with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=20) as serwer:
+        serwer.login(cfg["user"], cfg["password"])
+        serwer.send_message(wiadomosc)
 
 
 def breathing_widget_html(minutes, accent, border, text_col):
@@ -1440,6 +1570,13 @@ if not st.session_state.config_completed:
     if bg_choice == "Wgraj własne tło":
         custom_bg_file = st.file_uploader("Wgraj własne tło konwersacji (obraz)", type=["png", "jpg", "jpeg"])
 
+    glos_rozmowcy = st.radio(
+        "Głos rozmówcy (w rozmowie głosowej):",
+        ["Żeński", "Męski"],
+        horizontal=True,
+        help="Wybierz, czy rozmówca ma mówić głosem żeńskim czy męskim."
+    )
+
     avatar_choice = st.radio(
         "Avatar rozmówcy:", 
         ["Domyślny (robot 🤖)", "Wgraj własnego avatara"]
@@ -1464,6 +1601,7 @@ if not st.session_state.config_completed:
             st.session_state.custom_bg_file = custom_bg_file
             st.session_state.custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file is not None else None
             st.session_state.custom_bg_mime = custom_bg_file.type if custom_bg_file is not None else None
+            st.session_state.glos_rozmowcy = glos_rozmowcy
             st.session_state.avatar_choice = avatar_choice
             st.session_state.custom_avatar_file = custom_avatar_file
             st.session_state.custom_avatar_bytes = custom_avatar_file.getvalue() if custom_avatar_file is not None else None
@@ -1869,7 +2007,8 @@ with tab_trening:
             if idx not in st.session_state.tts_cache:
                 try:
                     st.session_state.tts_cache[idx] = base64.b64encode(
-                        synteza_mowy(tekst_do_mowy(ostatni["content"]))).decode()
+                        synteza_mowy(tekst_do_mowy(ostatni["content"]),
+                                     st.session_state.get("glos_rozmowcy", "Żeński"))).decode()
                 except Exception:
                     st.session_state.tts_cache[idx] = ""
             audio_b64 = st.session_state.tts_cache[idx]
@@ -2070,10 +2209,60 @@ with tab_postepy:
         )
         
     powiadomienia_wlaczone = st.toggle(
-        "🔔 Włącz powiadomienia", 
-        help="Aktywuje przypomnienia."
+        "🔔 Włącz powiadomienia e-mail",
+        help="Wyśle na podany adres e-mail przypomnienie z harmonogramem i plikiem kalendarza."
     )
-    
-    if st.button("💾 Zapisz harmonogram", use_container_width=True):
-        dni_tekst = ", ".join(wybrane_dni) if wybrane_dni else "brak wybranego dnia"
-        st.success(f"Zapisano pomyślnie! Data: {wybrana_data.strftime('%Y-%m-%d')}, Dni: {dni_tekst}, Godzina: {wybrana_godzina.strftime('%H:%M')}.")
+    adres_email = ""
+    if powiadomienia_wlaczone:
+        adres_email = st.text_input("Adres e-mail do powiadomień:", placeholder="np. imie.nazwisko@gmail.com",
+                                    key="adres_email_powiadomien")
+        st.caption("Powiadomienie e-mail pojawi się na każdym urządzeniu, na którym jest zalogowana Twoja skrzynka "
+                   "(telefon, komputer, zegarek). Załączony plik kalendarza doda treningi z przypomnieniem "
+                   "10 minut przed każdym terminem.")
+
+    ics_plik = zbuduj_ics(wybrana_data, wybrana_godzina, wybrane_dni or [])
+    dni_tekst = ", ".join(wybrane_dni) if wybrane_dni else "jednorazowo"
+    tresc_maila = (
+        "Cześć!\n\n"
+        "Oto Twój harmonogram treningów w aplikacji NEURO FRIEND:\n"
+        f"- od dnia: {wybrana_data.strftime('%Y-%m-%d')}\n"
+        f"- dni: {dni_tekst}\n"
+        f"- godzina: {wybrana_godzina.strftime('%H:%M')}\n\n"
+        "Otwórz załączony plik kalendarza (trening_neuro_friend.ics), aby dodać treningi do swojego kalendarza "
+        "z przypomnieniem na wszystkich urządzeniach.\n\n"
+        "Aplikacja: https://neuro-friend.streamlit.app/\n\n"
+        "Idziesz dokładnie takim tempem, jakie jest dla Ciebie najlepsze.\nNEURO FRIEND"
+    )
+
+    col_h1, col_h2 = st.columns(2)
+    with col_h1:
+        zapisz = st.button("💾 Zapisz harmonogram", use_container_width=True)
+    with col_h2:
+        test = st.button("📧 Wyślij testowe przypomnienie teraz", use_container_width=True,
+                         disabled=not powiadomienia_wlaczone)
+
+    if zapisz or test:
+        st.success(f"Zapisano harmonogram! Data: {wybrana_data.strftime('%Y-%m-%d')}, Dni: {dni_tekst}, "
+                   f"Godzina: {wybrana_godzina.strftime('%H:%M')}.")
+        if powiadomienia_wlaczone:
+            if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", adres_email or ""):
+                st.warning("⚠️ Wpisz poprawny adres e-mail, aby otrzymać powiadomienie.")
+            else:
+                try:
+                    temat = "Przypomnienie o treningu - NEURO FRIEND" if test else "Twój harmonogram treningów - NEURO FRIEND"
+                    with st.spinner("Wysyłanie wiadomości e-mail..."):
+                        wyslij_email(adres_email, temat, tresc_maila, ics_plik)
+                    st.success(f"📧 Wysłano wiadomość na adres {adres_email}. Sprawdź skrzynkę (także folder Spam).")
+                except Exception as e:
+                    st.error(f"⚠️ Nie udało się wysłać e-maila: {e}")
+                    st.info("Możesz pobrać plik kalendarza poniżej i dodać go do kalendarza ręcznie.")
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.download_button("📅 Pobierz plik kalendarza z przypomnieniami (.ics)", data=ics_plik,
+                           file_name="trening_neuro_friend.ics", mime="text/calendar", use_container_width=True)
+    with col_p2:
+        st.download_button("🖨️ Pobierz harmonogram do wydruku",
+                           data=zbuduj_harmonogram_do_druku(wybrana_data, wybrana_godzina, wybrane_dni or [], accent_col),
+                           file_name="harmonogram_neuro_friend.html", mime="text/html", use_container_width=True,
+                           help="Otwórz pobrany plik i kliknij „Drukuj / zapisz jako PDF”. Plan obejmuje najbliższe 4 tygodnie.")
