@@ -44,7 +44,7 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 # 1. KONFIGURACJA INTERFEJSU I STONOWANYCH MOTYWÓW UX/UI
 # ==========================================
 st.set_page_config(
-    page_title="NEURO FRIEND | Platforma Treningowa",
+    page_title="Conversation Ally | Platforma Treningowa",
     page_icon="🎓",
     layout="wide"
 )
@@ -274,7 +274,7 @@ def zbuduj_raport(messages, scenario_info, model_name, tryb_rozmowy, start_times
     now = datetime.datetime.now()
     linie = [
         "==================================================",
-        "        NEURO FRIEND - ZAPIS SESJI TRENINGOWEJ      ",
+        "        CONVERSATION ALLY - ZAPIS SESJI TRENINGOWEJ ",
         "==================================================",
         f"Data rozpoczęcia sesji: {start_timestamp}",
         f"Data wygenerowania raportu: {now.strftime('%Y-%m-%d %H:%M:%S')}",
@@ -545,19 +545,19 @@ def zbuduj_ics(data_start, godzina, dni):
     koniec = start + datetime.timedelta(minutes=15)
     fmt = "%Y%m%dT%H%M%S"
     linie = [
-        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//NEURO FRIEND//Trening rozmow//PL", "CALSCALE:GREGORIAN",
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Conversation Ally//Trening rozmow//PL", "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH", "BEGIN:VEVENT",
-        f"UID:{uuid.uuid4()}@neuro-friend",
+        f"UID:{uuid.uuid4()}@conversation-ally",
         f"DTSTAMP:{datetime.datetime.utcnow().strftime(fmt)}Z",
         f"DTSTART:{start.strftime(fmt)}",
         f"DTEND:{koniec.strftime(fmt)}",
-        "SUMMARY:Trening rozmowy - NEURO FRIEND",
-        "DESCRIPTION:Czas na krótki trening rozmowy w aplikacji NEURO FRIEND: https://neuro-friend.streamlit.app/",
+        "SUMMARY:Trening rozmowy - Conversation Ally",
+        "DESCRIPTION:Czas na krótki trening rozmowy w aplikacji Conversation Ally: https://neuro-friend.streamlit.app/",
         "URL:https://neuro-friend.streamlit.app/",
     ]
     if dni:
         linie.append("RRULE:FREQ=WEEKLY;BYDAY=" + ",".join(DNI_ICS[d] for d in dni if d in DNI_ICS))
-    linie += ["BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Trening rozmowy - NEURO FRIEND",
+    linie += ["BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Trening rozmowy - Conversation Ally",
               "TRIGGER:-PT10M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"]
     return ("\r\n".join(linie) + "\r\n").encode("utf-8")
 
@@ -587,7 +587,7 @@ def zbuduj_harmonogram_do_druku(data_start, godzina, dni, accent="#78716C"):
     )
     dni_tekst = ", ".join(dni) if dni else "jednorazowo"
     return f"""<!DOCTYPE html>
-<html lang="pl"><head><meta charset="UTF-8"><title>Harmonogram treningów - NEURO FRIEND</title>
+<html lang="pl"><head><meta charset="UTF-8"><title>Harmonogram treningów - Conversation Ally</title>
 <style>
 body{{font-family:"Segoe UI",Arial,sans-serif;color:#1C1917;margin:40px;}}
 h1{{color:{accent};margin-bottom:4px;}} .sub{{color:#57534E;margin-top:0;}}
@@ -598,7 +598,7 @@ td.box{{text-align:center;font-size:22px;}}
 .btn{{margin-top:20px;padding:10px 18px;background:{accent};color:#fff;border:none;border-radius:6px;font-size:15px;cursor:pointer;}}
 @media print{{.btn{{display:none;}} body{{margin:15mm;}}}}
 </style></head><body>
-<h1>NEURO FRIEND – mój plan treningów</h1>
+<h1>Conversation Ally – mój plan treningów</h1>
 <p class="sub">Dni: {dni_tekst} &nbsp;|&nbsp; Godzina: {godzina.strftime('%H:%M')} &nbsp;|&nbsp; Od: {data_start.strftime('%d.%m.%Y')}</p>
 <table><tr><th>Nr</th><th>Dzień</th><th>Data</th><th>Godzina</th><th>Zrobione</th><th>Moje notatki (jak poszło?)</th></tr>
 {wiersze}</table>
@@ -626,12 +626,12 @@ def wyslij_email(adresat, temat, tresc, zalacznik_ics=None):
         raise RuntimeError("Wysyłka e-mail nie jest skonfigurowana (brak SMTP_USER / SMTP_PASSWORD w Secrets).")
     wiadomosc = EmailMessage()
     wiadomosc["Subject"] = temat
-    wiadomosc["From"] = f"NEURO FRIEND <{cfg['user']}>"
+    wiadomosc["From"] = f"Conversation Ally <{cfg['user']}>"
     wiadomosc["To"] = adresat
     wiadomosc.set_content(tresc)
     if zalacznik_ics:
         wiadomosc.add_attachment(zalacznik_ics, maintype="text", subtype="calendar",
-                                 filename="trening_neuro_friend.ics")
+                                 filename="trening_conversation_ally.ics")
     with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=20) as serwer:
         serwer.login(cfg["user"], cfg["password"])
         serwer.send_message(wiadomosc)
@@ -1232,7 +1232,7 @@ if st.query_params.get("summarize") == "true":
 if not st.session_state.intro_dismissed:
     st.markdown("""
         <div class="info-card">
-            <h3>Witaj w aplikacji <span class="brand-logo">NEURO FRIEND</span></h3>
+            <h3>Witaj w aplikacji <span class="brand-logo">Conversation Ally</span></h3>
             <p>Aplikacja pozwala na trening umiejętności komunikacyjnych w bezpiecznej przestrzeni. System konfigurowany jest przy użyciu sprawdzonych metodologii psychologicznych i behawioralnych (Skala Likerta, Dyferencjał Semantyczny Osgooda, Indeks NASA-TLX oraz Model ABC), aby maksymalnie dopasować wsparcie do Twoich potrzeb.</p>
         </div>
     """, unsafe_allow_html=True)
@@ -1645,7 +1645,7 @@ kategoria_key = st.session_state.kategoria_key
 wariant_key = st.session_state.wariant_key
 wybrany_scenariusz = scenariusze_kategorie[kategoria_key][wariant_key]
 
-st.sidebar.markdown('<h2 class="brand-logo" style="font-size: 1.4rem; margin-bottom: 0px;">NEURO FRIEND</h2>', unsafe_allow_html=True)
+st.sidebar.markdown('<h2 class="brand-logo" style="font-size: 1.4rem; margin-bottom: 0px;">Conversation Ally</h2>', unsafe_allow_html=True)
 st.sidebar.markdown(f"**Model:** {wybrana_nazwa_modelu}")
 st.sidebar.markdown(f"**Tryb:** {tryb_rozmowy}")
 st.sidebar.markdown("---")
@@ -2245,14 +2245,14 @@ with tab_postepy:
     dni_tekst = ", ".join(wybrane_dni) if wybrane_dni else "jednorazowo"
     tresc_maila = (
         "Cześć!\n\n"
-        "Oto Twój harmonogram treningów w aplikacji NEURO FRIEND:\n"
+        "Oto Twój harmonogram treningów w aplikacji Conversation Ally:\n"
         f"- od dnia: {wybrana_data.strftime('%Y-%m-%d')}\n"
         f"- dni: {dni_tekst}\n"
         f"- godzina: {wybrana_godzina.strftime('%H:%M')}\n\n"
-        "Otwórz załączony plik kalendarza (trening_neuro_friend.ics), aby dodać treningi do swojego kalendarza "
+        "Otwórz załączony plik kalendarza (trening_conversation_ally.ics), aby dodać treningi do swojego kalendarza "
         "z przypomnieniem na wszystkich urządzeniach.\n\n"
         "Aplikacja: https://neuro-friend.streamlit.app/\n\n"
-        "Idziesz dokładnie takim tempem, jakie jest dla Ciebie najlepsze.\nNEURO FRIEND"
+        "Idziesz dokładnie takim tempem, jakie jest dla Ciebie najlepsze.\nConversation Ally"
     )
 
     col_h1, col_h2 = st.columns(2)
@@ -2270,7 +2270,7 @@ with tab_postepy:
                 st.warning("⚠️ Wpisz poprawny adres e-mail, aby otrzymać powiadomienie.")
             else:
                 try:
-                    temat = "Przypomnienie o treningu - NEURO FRIEND" if test else "Twój harmonogram treningów - NEURO FRIEND"
+                    temat = "Przypomnienie o treningu - Conversation Ally" if test else "Twój harmonogram treningów - Conversation Ally"
                     with st.spinner("Wysyłanie wiadomości e-mail..."):
                         wyslij_email(adres_email, temat, tresc_maila, ics_plik)
                     st.success(f"📧 Wysłano wiadomość na adres {adres_email}. Sprawdź skrzynkę (także folder Spam).")
@@ -2281,9 +2281,9 @@ with tab_postepy:
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.download_button("📅 Pobierz plik kalendarza z przypomnieniami (.ics)", data=ics_plik,
-                           file_name="trening_neuro_friend.ics", mime="text/calendar", use_container_width=True)
+                           file_name="trening_conversation_ally.ics", mime="text/calendar", use_container_width=True)
     with col_p2:
         st.download_button("🖨️ Pobierz harmonogram do wydruku",
                            data=zbuduj_harmonogram_do_druku(wybrana_data, wybrana_godzina, wybrane_dni or [], accent_col),
-                           file_name="harmonogram_neuro_friend.html", mime="text/html", use_container_width=True,
+                           file_name="harmonogram_conversation_ally.html", mime="text/html", use_container_width=True,
                            help="Otwórz pobrany plik i kliknij „Drukuj / zapisz jako PDF”. Plan obejmuje najbliższe 4 tygodnie.")
